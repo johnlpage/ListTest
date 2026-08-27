@@ -1,0 +1,239 @@
+package com.johnlpage.memex.Listing.controller;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.johnlpage.memex.generics.dto.PageDto;
+import com.johnlpage.memex.Listing.model.Listing;
+import com.johnlpage.memex.Listing.repository.ListingRepository;
+import com.johnlpage.memex.Listing.service.*;
+import com.johnlpage.memex.generics.service.MongoDbJsonStreamingLoaderService;
+import com.johnlpage.memex.util.UpdateStrategy;
+import com.johnlpage.memex.generics.service.DataLoadException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.BufferedOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Iterator;
+import java.util.List;
+import java.util.stream.Stream;
+import lombok.RequiredArgsConstructor;
+import org.bson.json.JsonObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Slice;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+
+
+@RequiredArgsConstructor
+@RestController
+@RequestMapping("/api")
+public class ListingController {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ListingController.class);
+
+    private final ListingQueryService queryService;
+    private final ListingJsonLoaderService loaderService;
+    private final ListingPreWriteTriggerService preWriteTriggerService;
+    private final ListingHistoryTriggerService postWriteTriggerService;
+    private final ListingDownstreamService downstreamService;
+    private final ListingHistoryService historyService;
+    private final ListingInvalidDataHandlerService invalidDataHandlerService;
+
+    private final ObjectMapper objectMapper;
+    private final ListingRepository repository;
+
+
+
+    /**
+     * Bulk load from JSON stream. Could take a single item too
+     * This could read from a file, Kafka queue, or any stream of JSON data.
+     */
+    @PostMapping("/listings")
+    public ResponseEntity<MongoDbJsonStreamingLoaderService.JsonStreamingLoadResponse> loadFromStream(
+            HttpServletRequest request,
+            @RequestParam(name = "futz", required = false, defaultValue = "false") Boolean futz,
+            @RequestParam(name = "updateStrategy", required = false, defaultValue = "REPLACE")
+                UpdateStrategy updateStrategy) {
+        LOG.info("Load Listing data from JSON stream starting...");
+        MongoDbJsonStreamingLoaderService.JsonStreamingLoadResponse returnValue;
+        try {
+            returnValue =
+                loaderService.loadFromJsonStream(
+                    request.getInputStream(),
+                    Listing.class,
+                    invalidDataHandlerService,
+                    updateStrategy,
+                    futz ? preWriteTriggerService : null,
+                    updateStrategy.equals(UpdateStrategy.UPDATEWITHHISTORY)
+                        ? postWriteTriggerService
+                        : null);
+
+            return new ResponseEntity<>(returnValue, HttpStatus.OK);
+        } catch (DataLoadException e) {
+                      returnValue =
+                              new MongoDbJsonStreamingLoaderService.JsonStreamingLoadResponse(
+                                      e.getUpdates(), e.getDeletes(), e.getInserts(), false, e.getMessage());
+
+                      // Log the exception if necessary and return HTTP 500 Internal Server Error
+                      return new ResponseEntity<>(returnValue, HttpStatus.MULTI_STATUS);
+                  } catch (Exception e) {
+                      LOG.error(e.getMessage());
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+
+    /**
+     * Get by ID
+     */
+    @GetMapping("/listings/id/{id}")
+    public ResponseEntity<Listing> getById(@PathVariable Long id) {
+        return queryService
+            .getById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Get by example with pagination.
+     * Don't forget to add indexes as required.
+     */
+
+    @PostMapping("/listings/byExample")
+    public ResponseEntity<PageDto<Listing>> getByExample(
+            @RequestBody Listing example,
+            @RequestParam(name = "page", required = false, defaultValue = "0") int page,
+            @RequestParam(name = "size", required = false, defaultValue = "10") int size) {
+
+        Slice<Listing> returnPage = queryService.getByExample(example, page, size);
+        PageDto<Listing> entity = new PageDto<>(returnPage);
+        return ResponseEntity.ok(entity);
+    }
+
+    /**
+     * Raw MongoDB query interface.
+     * Lets the caller design their own query and projection.
+     */
+    @PostMapping(value = "/listings/query", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> mongoQuery(@RequestBody String requestBody) {
+        List<Listing> result = queryService.mongoDbNativeQuery(requestBody);
+        try {
+            String jsonResult = objectMapper.writeValueAsString(result);
+            return ResponseEntity.ok(jsonResult);
+        } catch (JsonProcessingException e) {
+            return ResponseEntity.status(500).body("Error converting results to JSON");
+        }
+    }
+
+    /**
+     * Atlas Search query interface
+     */
+    @PostMapping("/listings/search")
+    public ResponseEntity<String> atlasSearchQuery(@RequestBody String requestBody) {
+        List<Listing> result = queryService.atlasSearchQuery(requestBody);
+        try {
+            String jsonResult = objectMapper.writeValueAsString(result);
+            return ResponseEntity.ok(jsonResult);
+        } catch (JsonProcessingException e) {
+            return ResponseEntity.status(500).body("Error converting results to JSON");
+        }
+    }
+
+    /**
+     * Stream all records as JSON.
+     * Uses object mapping (Document -> Object -> JSON)
+     */
+    @GetMapping(value = "/listings/json", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<StreamingResponseBody> streamJson() {
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                outputStream ->
+                    writeDocumentsToOutputStream(outputStream, downstreamService.jsonExtractStream()));
+    }
+
+    /**
+     * Stream all records as native JSON.
+     * Uses RawBsonDocument for better performance (about half the CPU).
+     * TODO: Customize the projection format for your model
+     */
+    @GetMapping(value = "/listings/json/native", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<StreamingResponseBody> streamJsonNative() {
+
+        // TODO: Customize this projection for your model fields
+        String formatRequired =
+            """
+            {
+              "_id": 1
+            }
+            """;
+
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                outputStream -> {
+                    try (BufferedOutputStream bufferedOutputStream =
+                            new BufferedOutputStream(outputStream);
+                        Stream<JsonObject> stream =
+                            downstreamService.nativeJsonExtractStream(formatRequired)) {
+                        boolean isFirst = true;
+                        Iterator<JsonObject> iterator = stream.iterator();
+                        while (iterator.hasNext()) {
+                            JsonObject jsonObject = iterator.next();
+                            if (!isFirst) {
+                                bufferedOutputStream.write("\n".getBytes());
+                            }
+                            bufferedOutputStream.write(jsonObject.getJson().getBytes());
+                            isFirst = false;
+                        }
+                    } catch (IOException e) {
+                        LOG.error(
+                            "Error during streaming jsonObjects using native mode: {}", e.getMessage());
+                    }
+                });
+    }
+
+    /**
+     * Get historical data as of a specific date
+     */
+    @GetMapping(value = "/listings/asOf", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<StreamingResponseBody> dataAtDate(
+            @RequestParam(name = "asOfDate") @DateTimeFormat(pattern = "yyyyMMddHHmmss") LocalDateTime asOfDateParam,
+            @RequestParam(name = "id") Long id) {
+        Instant asOfDate = asOfDateParam.atZone(ZoneOffset.UTC).toInstant();
+        return ResponseEntity.ok()
+            .contentType(MediaType.APPLICATION_JSON)
+            .body(
+                outputStream ->
+                    writeDocumentsToOutputStream(outputStream, historyService.asOfDate(id, asOfDate)));
+    }
+
+    private void writeDocumentsToOutputStream(
+            OutputStream outputStream, Stream<Listing> recordStream) {
+        try (BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(outputStream)) {
+            boolean isFirst = true;
+            for (Listing record : (Iterable<Listing>) recordStream::iterator) {
+                if (!isFirst) {
+                    bufferedOutputStream.write("\n".getBytes());
+                }
+                bufferedOutputStream.write(objectMapper.writeValueAsBytes(record));
+                isFirst = false;
+            }
+        } catch (IOException e) {
+            LOG.error("Error during streaming documents: {}", e.getMessage());
+        }
+    }
+}

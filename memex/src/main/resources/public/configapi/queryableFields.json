@@ -1,0 +1,32 @@
+{
+  "price": 1,
+  "bedrooms": 1,
+  "bathrooms": 1,
+  "yearBuilt": 1,
+  "livingArea": 1,
+  "address.zipcode": 1,
+  "homeType": [
+    "SINGLE_FAMILY",
+    "CONDO",
+    "TOWNHOUSE",
+    "MULTI_FAMILY",
+    "APARTMENT",
+    "LOT"
+  ],
+  "homeStatus": [
+    "FOR_SALE",
+    "FOR_RENT",
+    "SOLD",
+    "PENDING",
+    "OTHER"
+  ],
+  "State=address.state": [
+    "CA",
+    "NY",
+    "TX",
+    "FL",
+    "WA"
+  ],
+  "City=address.city": "",
+  "dateSold": ""
+}

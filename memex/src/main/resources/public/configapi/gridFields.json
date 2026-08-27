@@ -1,0 +1,14 @@
+{
+  "Listing ID": "listingId",
+  "Address": "address.streetAddress",
+  "City": "address.city",
+  "State": "address.state",
+  "Zip": "address.zipcode",
+  "Price": "price",
+  "Beds": "bedrooms",
+  "Baths": "bathrooms",
+  "Home Type": "homeType",
+  "Status": "homeStatus",
+  "Living Area": "livingArea",
+  "Year Built": "yearBuilt"
+}
