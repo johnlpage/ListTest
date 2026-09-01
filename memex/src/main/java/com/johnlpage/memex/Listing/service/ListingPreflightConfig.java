@@ -35,7 +35,8 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
     public List<String> getShardKeyFields() {
         // Shard key is { city, _id }. _id is always added to write queries automatically,
         // so only the other shard key field(s) need to be listed here.
-        return List.of("city");
+       return  List.of();
+        // return List.of("city");
     }
 
 
