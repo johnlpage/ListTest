@@ -26,6 +26,9 @@ public class ListingPreWriteTriggerService
         // - Validate and transform data
         // - Set default values
         // - Mark records for soft delete
+        if(System.getenv("MODIFY_ON_LOAD") != null) {
+            document.setDescription(document.getDescription() + " (updated)");
+        }
     }
 
     /* This Code is used for immutable models */
