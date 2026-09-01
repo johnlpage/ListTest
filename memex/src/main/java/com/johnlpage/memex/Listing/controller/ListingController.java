@@ -68,6 +68,7 @@ public class ListingController {
             @RequestParam(name = "futz", required = false, defaultValue = "false") Boolean futz,
             @RequestParam(name = "updateStrategy", required = false, defaultValue = "REPLACE")
                 UpdateStrategy updateStrategy) {
+
         LOG.info("Load Listing data from JSON stream starting...");
         MongoDbJsonStreamingLoaderService.JsonStreamingLoadResponse returnValue;
         try {

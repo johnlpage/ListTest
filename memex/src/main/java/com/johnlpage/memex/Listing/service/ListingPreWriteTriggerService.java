@@ -21,14 +21,10 @@ public class ListingPreWriteTriggerService
     /** This Code is for mutable models */
     @Override
     public void modifyMutableDataPreWrite(Listing document) {
-        // TODO: Implement your pre-write modifications for mutable models
-        // Example:
-        // - Validate and transform data
-        // - Set default values
-        // - Mark records for soft delete
-        if(System.getenv("MODIFY_ON_LOAD") != null) {
+    // Controller is set up to only inject this if futz=true
+
             document.setDescription(document.getDescription() + " (updated)");
-        }
+
     }
 
     /* This Code is used for immutable models */
