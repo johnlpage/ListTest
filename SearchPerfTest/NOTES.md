@@ -172,3 +172,39 @@ Built and tested end-to-end:
   first real test should be a small `--total 20 --parallelism 1` smoke run
   once pulled onto a box with memex actually running, to sanity check the
   generated query shapes are all accepted (200s, not 400s) before scaling up.
+
+## --limit flag added (commit 1684114)
+`generate_queries.py --limit N` (default 200) sets a fixed `limit` value for
+every generated query, replacing the earlier random choice from
+`[10,20,20,20,50]`.
+
+## Atlas Search date handling fix (commit ef6d05e, also ported to
+MongoEnterpriseWebServices as 90bbe0b) - user hit
+"Path 'dateSold' needs to be indexed as token" in memex logs. Root cause:
+`main.js`'s exact-date-match branch unwrapped `{"$date": iso}` down to a
+bare ISO string before assigning it to the `$search` range clause's
+gte/lte - a bare string against a date-typed indexed path makes Atlas
+Search fall back to token/string-match semantics, hence the error (nothing
+wrong with dateSold's actual "date" type mapping). Fixed by keeping
+gte/lte wrapped as `{"$date": val.$date}`. The `>`/`<` branch was already
+correct (val.$gt/$lt already preserve the full `{"$date":...}` object).
+Also fixed the equivalent bug in `generate_queries.py` (was emitting plain
+"YYYY-MM-DD" strings for `dateSold` clause values) and added `gt`-only/
+`lt`-only single-sided range generation for dates (and numbers), mirroring
+mongoQuery's real `>`/`<`/exact-match shapes rather than only symmetric
+two-sided ranges.
+
+## Query field-combination requirement (this change)
+Per explicit request: every generated query must combine at least 2
+distinct field-specific filter clauses, UNLESS it's a pure global full-text
+query (`fulltext_only`, no field filters at all - covers the "0 filters"
+case). Changes in `build_query()`:
+- Removed the `scoped_text` style entirely (single-field text search) -
+  redundant with `fulltext_only` for testing the "no filters" case.
+- `n_filters = rng.randint(2, 3)` (was `randint(1, 3)`) for both remaining
+  non-fulltext styles (`filters_only`, `compound_with_text`).
+- Style weights adjusted to `fulltext_only`/`compound_with_text`/
+  `filters_only` = 25/40/35 (was 25/35/25/15 across 4 styles).
+- Verified on a regenerated 10,000-query pool: field-count distribution
+  within compound queries is exactly `{2: ~3728, 3: ~3797}` - zero 1-field
+  compound queries remain, minimum is 2 as required.

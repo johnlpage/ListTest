@@ -399,9 +399,14 @@ def build_clause(path, declared_type, sampler, rng):
 
 def build_query(samplers, keywords, grid_projection, rng, limit):
     field_paths = list(samplers.keys())
+    # "fulltext_only" (a global free-text search, no field-specific filters)
+    # is the only style allowed to combine fewer than 2 fields. Every other
+    # style combines at least 2 distinct field-specific filter clauses -
+    # "scoped_text" (a single scoped field, no filters) was removed since a
+    # plain global fulltext query already covers the "0 filter fields" case.
     style = rng.choices(
-        ["fulltext_only", "compound_with_text", "filters_only", "scoped_text"],
-        weights=[25, 35, 25, 15],
+        ["fulltext_only", "compound_with_text", "filters_only"],
+        weights=[25, 40, 35],
         k=1,
     )[0]
 
@@ -411,15 +416,8 @@ def build_query(samplers, keywords, grid_projection, rng, limit):
     if style == "fulltext_only":
         search["text"] = {"query": rng.choice(keywords), "path": {"wildcard": "*"}}
 
-    elif style == "scoped_text":
-        string_fields = [p for p in field_paths if samplers[p][1].is_stringish() or p == "description"]
-        path = rng.choice(string_fields) if string_fields else rng.choice(field_paths)
-        decl, sampler = samplers[path]
-        value = sampler.sample(rng) if path != "description" else rng.choice(keywords)
-        search["text"] = {"query": str(value), "path": path}
-
     else:
-        n_filters = rng.randint(1, 3)
+        n_filters = rng.randint(2, 3)
         chosen = rng.sample(field_paths, k=min(n_filters, len(field_paths)))
         for path in chosen:
             decl, sampler = samplers[path]

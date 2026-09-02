@@ -54,11 +54,12 @@ Each file in `queries/` is a complete request body for
 {"search": {...}, "projection": {...}, "skip": 0, "limit": 20}
 ```
 The generator produces a mix of query shapes: pure full-text (matching the
-UI's free-text search box), compound (filters + full-text), filter-only
-(dropdown-style, no keyword), and single-field scoped text search - with a
-realistic mix of `equals`/`range`/`text` operators per field, matching what
-the UI's query builder actually sends (see `main.js`'s `searchQuery`
-computed property).
+UI's free-text search box, no field-specific filters), compound (2-3 field
+filters + full-text), and filter-only (2-3 field filters, dropdown-style, no
+keyword) - every query combines at least 2 field-specific filters unless
+it's a global full-text search. Each field filter uses a realistic mix of
+`equals`/`range`/`text` operators, matching what the UI's query builder
+actually sends (see `main.js`'s `searchQuery` computed property).
 
 ### 2. Run a load test
 
