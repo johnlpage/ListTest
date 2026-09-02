@@ -44,6 +44,15 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
     public List<Document> getSearchIndexes() {
 
 
+        // "dynamic": true means every field is auto-indexed with its
+        // automatically-detected type (avoids ever having to hand-specify a
+        // "type" for scalar fields like bedrooms/bathrooms/price - Atlas
+        // requires an explicit type on any field you list yourself, but
+        // fields left out of "fields" entirely are covered by dynamic
+        // auto-detection instead). The "fields" entries below are additive
+        // overrides layered on top of that dynamic behavior, used only for
+        // the address fields that need "autocomplete" support (type-ahead
+        // search box) in addition to their normal auto-detected type.
         String SEARCH_INDEXES = """
                 { "searchIndexes": [
                     {
@@ -51,7 +60,11 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
                         "definition": {
                             "mappings": {
                                 "dynamic": true,
-                                "fields": {}
+                                "fields": {
+                                    "city":               { "type": "autocomplete" },
+                                    "streetAddress":      { "type": "autocomplete" },
+                                    "abbreviatedAddress":  { "type": "autocomplete" }
+                                }
                             }
                         }
                     }
