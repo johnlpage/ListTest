@@ -44,64 +44,14 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
     public List<Document> getSearchIndexes() {
 
 
-        // Explicit (non-dynamic) field list covering only the fields a
-        // consumer-facing real-estate search (e.g. realtor.com-style filters
-        // and keyword search) would query on. Deliberately excludes arrays
-        // (priceHistory, schools, nearbyHomes, photos, etc.), URLs, and the
-        // redundant nested `address` object (duplicates top-level
-        // city/state/streetAddress/zipcode). Most fields use an empty `{}`
-        // mapping so Atlas Search auto-detects the appropriate type; city,
-        // streetAddress and abbreviatedAddress additionally get an
-        // "autocomplete" type for type-ahead search-box support.
         String SEARCH_INDEXES = """
                 { "searchIndexes": [
                     {
                         "name": "default",
                         "definition": {
                             "mappings": {
-                                "dynamic": false,
-                                "fields": {
-                                    "city":                  [ { "type": "string" }, { "type": "autocomplete" } ],
-                                    "state":                 {},
-                                    "zipcode":               {},
-                                    "county":                {},
-                                    "streetAddress":         [ { "type": "string" }, { "type": "autocomplete" } ],
-                                    "abbreviatedAddress":    [ { "type": "string" }, { "type": "autocomplete" } ],
-
-                                    "price":                 {},
-                                    "zestimate":             {},
-                                    "rentZestimate":         {},
-                                    "lastSoldPrice":         {},
-
-                                    "bedrooms":              {},
-                                    "bathrooms":             {},
-                                    "livingArea":            {},
-                                    "lotSize":               {},
-                                    "yearBuilt":             {},
-
-                                    "homeType":              {},
-                                    "propertyTypeDimension": {},
-                                    "homeStatus":            {},
-                                    "listingTypeDimension":  {},
-                                    "tag":                   {},
-
-                                    "daysOnZillow":          {},
-                                    "dateSold":              {},
-
-                                    "hoa_details": {
-                                        "type": "document",
-                                        "fields": {
-                                            "has_hoa":        {},
-                                            "hoa_fee_value":  {},
-                                            "hoa_fee_period": {}
-                                        }
-                                    },
-
-                                    "description": { "type": "string" },
-
-                                    "zpid":                  {},
-                                    "listingId":             {}
-                                }
+                                "dynamic": true,
+                                "fields": {}
                             }
                         }
                     }
