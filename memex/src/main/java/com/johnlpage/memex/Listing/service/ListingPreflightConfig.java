@@ -47,18 +47,25 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
         // Explicit (non-dynamic) field list covering only the fields a
         // consumer-facing real-estate search (e.g. realtor.com-style filters
         // and keyword search) would query on. Deliberately excludes arrays
-        // (priceHistory, schools, nearbyHomes, photos, etc.), URLs, the
-        // redundant nested `address` object (duplicates top-level
-        // city/state/streetAddress/zipcode), and `listingId` (that field is
-        // @Id-annotated so Spring Data actually stores it under the "_id"
-        // key, not "listingId" - indexing it by its Java field name would
-        // silently match nothing; exact _id lookups don't need Atlas Search
-        // anyway). Atlas Search requires an explicit "type" on every field
-        // you list statically here - true per-field dynamic type inference
-        // only exists for a whole embedded document subtree (see
-        // hoa_details below) or for fields left out of "fields" entirely
-        // under a top-level "dynamic": true, which isn't what we want since
-        // we're deliberately restricting to this subset.
+        // (priceHistory, schools, nearbyHomes, photos, etc.), URLs, and
+        // `listingId` (that field is @Id-annotated so Spring Data actually
+        // stores it under the "_id" key, not "listingId" - indexing it by
+        // its Java field name would silently match nothing; exact _id
+        // lookups don't need Atlas Search anyway). Atlas Search requires an
+        // explicit "type" on every field you list statically here - true
+        // per-field dynamic type inference only exists for a whole embedded
+        // document subtree (see hoa_details/address below) or for fields
+        // left out of "fields" entirely under a top-level "dynamic": true,
+        // which isn't what we want since we're deliberately restricting to
+        // this subset.
+        //
+        // NOTE: city/state/zipcode/streetAddress are generated onto BOTH a
+        // top-level field AND the nested `address` sub-object with
+        // identical values, but the rest of the app (queryableFields.json /
+        // gridFields.json, and by extension the UI) exclusively uses the
+        // nested `address.*` paths - so that's what must be indexed here
+        // too, or $search queries against address.state/address.city/etc.
+        // silently match nothing under dynamic:false.
         String SEARCH_INDEXES = """
                 { "searchIndexes": [
                     {
@@ -67,11 +74,16 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
                             "mappings": {
                                 "dynamic": false,
                                 "fields": {
-                                    "city":                  { "type": "string" },
-                                    "state":                 { "type": "string" },
-                                    "zipcode":               { "type": "number" },
+                                    "address": {
+                                        "type": "document",
+                                        "fields": {
+                                            "city":          { "type": "string" },
+                                            "state":         { "type": "string" },
+                                            "zipcode":       { "type": "number" },
+                                            "streetAddress": { "type": "string" }
+                                        }
+                                    },
                                     "county":                { "type": "string" },
-                                    "streetAddress":         { "type": "string" },
                                     "abbreviatedAddress":    { "type": "string" },
 
                                     "price":                 { "type": "number" },
