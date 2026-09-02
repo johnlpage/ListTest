@@ -61,12 +61,12 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
                             "mappings": {
                                 "dynamic": false,
                                 "fields": {
-                                    "city":                  [ {}, { "type": "autocomplete" } ],
+                                    "city":                  [ { "type": "string" }, { "type": "autocomplete" } ],
                                     "state":                 {},
                                     "zipcode":               {},
                                     "county":                {},
-                                    "streetAddress":         [ {}, { "type": "autocomplete" } ],
-                                    "abbreviatedAddress":    [ {}, { "type": "autocomplete" } ],
+                                    "streetAddress":         [ { "type": "string" }, { "type": "autocomplete" } ],
+                                    "abbreviatedAddress":    [ { "type": "string" }, { "type": "autocomplete" } ],
 
                                     "price":                 {},
                                     "zestimate":             {},
