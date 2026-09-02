@@ -44,26 +44,64 @@ public class ListingPreflightConfig implements CollectionPreflightConfig {
     public List<Document> getSearchIndexes() {
 
 
-        // "dynamic": true means every field is auto-indexed with its
-        // automatically-detected type (avoids ever having to hand-specify a
-        // "type" for scalar fields like bedrooms/bathrooms/price - Atlas
-        // requires an explicit type on any field you list yourself, but
-        // fields left out of "fields" entirely are covered by dynamic
-        // auto-detection instead). The "fields" entries below are additive
-        // overrides layered on top of that dynamic behavior, used only for
-        // the address fields that need "autocomplete" support (type-ahead
-        // search box) in addition to their normal auto-detected type.
+        // Explicit (non-dynamic) field list covering only the fields a
+        // consumer-facing real-estate search (e.g. realtor.com-style filters
+        // and keyword search) would query on. Deliberately excludes arrays
+        // (priceHistory, schools, nearbyHomes, photos, etc.), URLs, the
+        // redundant nested `address` object (duplicates top-level
+        // city/state/streetAddress/zipcode), and `listingId` (that field is
+        // @Id-annotated so Spring Data actually stores it under the "_id"
+        // key, not "listingId" - indexing it by its Java field name would
+        // silently match nothing; exact _id lookups don't need Atlas Search
+        // anyway). Atlas Search requires an explicit "type" on every field
+        // you list statically here - true per-field dynamic type inference
+        // only exists for a whole embedded document subtree (see
+        // hoa_details below) or for fields left out of "fields" entirely
+        // under a top-level "dynamic": true, which isn't what we want since
+        // we're deliberately restricting to this subset.
         String SEARCH_INDEXES = """
                 { "searchIndexes": [
                     {
                         "name": "default",
                         "definition": {
                             "mappings": {
-                                "dynamic": true,
+                                "dynamic": false,
                                 "fields": {
-                                    "city":               { "type": "autocomplete" },
-                                    "streetAddress":      { "type": "autocomplete" },
-                                    "abbreviatedAddress":  { "type": "autocomplete" }
+                                    "city":                  { "type": "string" },
+                                    "state":                 { "type": "string" },
+                                    "zipcode":               { "type": "number" },
+                                    "county":                { "type": "string" },
+                                    "streetAddress":         { "type": "string" },
+                                    "abbreviatedAddress":    { "type": "string" },
+
+                                    "price":                 { "type": "number" },
+                                    "zestimate":             { "type": "number" },
+                                    "rentZestimate":         { "type": "number" },
+                                    "lastSoldPrice":         { "type": "number" },
+
+                                    "bedrooms":              { "type": "number" },
+                                    "bathrooms":             { "type": "number" },
+                                    "livingArea":            { "type": "number" },
+                                    "lotSize":               { "type": "number" },
+                                    "yearBuilt":             { "type": "number" },
+
+                                    "homeType":              { "type": "string" },
+                                    "propertyTypeDimension": { "type": "string" },
+                                    "homeStatus":            { "type": "string" },
+                                    "listingTypeDimension":  { "type": "string" },
+                                    "tag":                   { "type": "string" },
+
+                                    "daysOnZillow":          { "type": "number" },
+                                    "dateSold":              { "type": "date" },
+
+                                    "hoa_details": {
+                                        "type": "document",
+                                        "dynamic": true
+                                    },
+
+                                    "description":           { "type": "string" },
+
+                                    "zpid":                  { "type": "number" }
                                 }
                             }
                         }
