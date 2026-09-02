@@ -258,10 +258,16 @@ class FieldSampler:
         e = datetime.strptime(end, fmt)
         delta = (e - s).total_seconds()
         result = s + timedelta(seconds=rng.uniform(0, max(delta, 0)))
-        # The Listing model's date fields (dateSold) are java.time.LocalDate,
-        # stored/indexed as a date - a plain ISO date string is what Atlas
-        # Search's "date" type and the rest of the app (main.js) expect.
-        return result.strftime("%Y-%m-%d")
+        # Full ISO 8601 datetime with milliseconds + 'Z', matching exactly
+        # what JS's Date.prototype.toISOString() produces (see main.js's
+        # mongoQuery computed property) - this raw string must be wrapped in
+        # MongoDB Extended JSON's {"$date": "..."} form wherever it's placed
+        # into a query clause (see build_clause below), or the server parses
+        # it as a plain BSON string instead of a real date, which causes
+        # Atlas Search to reject it with "needs to be indexed as token" (it
+        # falls back to token/string-match semantics for a string value
+        # against a field that isn't indexed as a token).
+        return result.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
 # ---------------------------------------------------------------------------
@@ -339,22 +345,51 @@ def extract_keywords(samplers):
 # ---------------------------------------------------------------------------
 def build_clause(path, declared_type, sampler, rng):
     """Return an Atlas Search operator document for one field, matching the
-    same operator choices main.js's query builder actually uses: "equals" for
-    number/date exact matches, "range" for </>/between, "text" for strings."""
-    is_number_or_date = declared_type in ("number", "date") or (
-        declared_type == "auto" and (sampler.is_numeric() or sampler.is_dateish())
-    )
+    same operator choices main.js's query builder actually uses/supports:
+    "equals" for number exact matches, "range" for </>/between on numbers and
+    dates, "text" for strings. Mirrors mongoQuery's actual set of shapes - a
+    plain value (exact match), a "<value" (lt-only), or a ">value" (gt-only)
+    - rather than only ever generating symmetric two-sided ranges.
 
-    if is_number_or_date:
-        if rng.random() < 0.4:
+    Dates are ALWAYS expressed via "range" (never "equals") with values
+    wrapped in MongoDB Extended JSON's {"$date": "..."} form - this exactly
+    mirrors the main.js fix for the same field: a plain ISO string value
+    against a "date"-typed indexed field gets parsed server-side as a BSON
+    string, not a real date, and Atlas Search then rejects it with "needs to
+    be indexed as token" (it falls back to token/string-match semantics for
+    a string value against a field that isn't indexed as a token)."""
+    is_date = declared_type == "date" or (declared_type == "auto" and sampler.is_dateish())
+    is_number = declared_type == "number" or (declared_type == "auto" and sampler.is_numeric())
+
+    def as_date_value(v):
+        return {"$date": v} if is_date else v
+
+    if is_date or is_number:
+        op = rng.choices(["equals", "gt", "lt", "range"], weights=[30, 20, 20, 30], k=1)[0]
+
+        if op == "equals" and not is_date:
             value = sampler.sample(rng)
             if value is None:
                 return None
             return {"equals": {"path": path, "value": value}}
-        lo, hi = sampler.sample_range(rng)
-        if lo is None or hi is None:
+
+        if op in ("equals", "range"):
+            lo, hi = sampler.sample_range(rng)
+            if lo is None or hi is None:
+                return None
+            if op == "equals":
+                # No dedicated exact-match operator used for dates (see
+                # docstring) - an inclusive gte===lte range is equivalent.
+                lo = hi = sampler.sample(rng)
+                if lo is None:
+                    return None
+            return {"range": {"path": path, "gte": as_date_value(lo), "lte": as_date_value(hi)}}
+
+        value = sampler.sample(rng)
+        if value is None:
             return None
-        return {"range": {"path": path, "gte": lo, "lte": hi}}
+        bound = "gt" if op == "gt" else "lt"
+        return {"range": {"path": path, bound: as_date_value(value)}}
 
     value = sampler.sample(rng)
     if value is None:
