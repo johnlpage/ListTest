@@ -42,9 +42,10 @@ CSV file each field's values came from.
 ### 1. Generate the query pool (once, or whenever the search index/data changes)
 
 ```bash
-python3 generate_queries.py                 # writes 10,000 query files to queries/
+python3 generate_queries.py                 # writes 10,000 query files to queries/, limit=200 each
 python3 generate_queries.py --explain       # just show field discovery, don't generate
 python3 generate_queries.py --count 2000    # smaller/larger pool
+python3 generate_queries.py --limit 50      # override the per-query "limit" (default 200)
 ```
 
 Each file in `queries/` is a complete request body for

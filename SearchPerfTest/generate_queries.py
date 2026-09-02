@@ -362,7 +362,7 @@ def build_clause(path, declared_type, sampler, rng):
     return {"text": {"path": path, "query": str(value)}}
 
 
-def build_query(samplers, keywords, grid_projection, rng):
+def build_query(samplers, keywords, grid_projection, rng, limit):
     field_paths = list(samplers.keys())
     style = rng.choices(
         ["fulltext_only", "compound_with_text", "filters_only", "scoped_text"],
@@ -400,7 +400,6 @@ def build_query(samplers, keywords, grid_projection, rng):
         else:
             search["compound"] = {"must": must}
 
-    limit = rng.choice([10, 20, 20, 20, 50])
     skip = rng.choice([0, 0, 0, 20, 40])
 
     return {
@@ -431,6 +430,8 @@ def main():
     parser.add_argument("--total-docs", type=int, default=16_000_000,
                          help="Approximate total documents in the collection (used to size the @ONEUP id sampling range for zpid)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducible query pools")
+    parser.add_argument("--limit", type=int, default=200,
+                         help="Value used for the 'limit' field in every generated query envelope")
     parser.add_argument("--explain", action="store_true",
                          help="Print field discovery/sampling decisions and exit without generating files")
     args = parser.parse_args()
@@ -454,7 +455,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     width = max(5, len(str(args.count)))
     for i in range(1, args.count + 1):
-        query = build_query(samplers, keywords, grid_projection, rng)
+        query = build_query(samplers, keywords, grid_projection, rng, args.limit)
         out_path = args.out / f"query_{i:0{width}d}.json"
         out_path.write_text(json.dumps(query))
 
