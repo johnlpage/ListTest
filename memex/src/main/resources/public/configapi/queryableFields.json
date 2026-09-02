@@ -1,32 +1,75 @@
 {
   "price": 1,
+  "zestimate": 1,
+  "rentZestimate": 1,
+  "lastSoldPrice": 1,
   "bedrooms": 1,
   "bathrooms": 1,
-  "yearBuilt": 1,
   "livingArea": 1,
+  "lotSize": 1,
+  "yearBuilt": 1,
+  "daysOnZillow": 1,
   "address.zipcode": 1,
+  "City=address.city": "",
+  "State=address.state": [
+    "FL",
+    "CA",
+    "NY",
+    "TX",
+    "PA",
+    "MI",
+    "TN",
+    "MN",
+    "SC",
+    "MA"
+  ],
+  "Street Address=address.streetAddress": "",
+  "Full Address=abbreviatedAddress": "",
+  "County=county": "",
   "homeType": [
     "SINGLE_FAMILY",
     "CONDO",
     "TOWNHOUSE",
     "MULTI_FAMILY",
     "APARTMENT",
-    "LOT"
+    "MANUFACTURED",
+    "HOME_TYPE_UNKNOWN"
+  ],
+  "propertyTypeDimension": [
+    "Single Family",
+    "Condo",
+    "Townhouse",
+    "Multi Family",
+    "Apartment",
+    "Manufactured",
+    "Home Type Unknown"
   ],
   "homeStatus": [
     "FOR_SALE",
-    "FOR_RENT",
     "SOLD",
-    "PENDING",
+    "RECENTLY_SOLD",
     "OTHER"
   ],
-  "State=address.state": [
-    "CA",
-    "NY",
-    "TX",
-    "FL",
-    "WA"
+  "listingTypeDimension": [
+    "Unknown Listed By",
+    "For Sale by Agent",
+    "Non Owner Occupied"
   ],
-  "City=address.city": "",
-  "dateSold": ""
+  "tag": [
+    "Off market",
+    "Sold",
+    "Closed",
+    "For sale",
+    "Pending do not show"
+  ],
+  "dateSold": "",
+  "HOA Fee=hoa_details.hoa_fee_value": 1,
+  "HOA Period=hoa_details.hoa_fee_period": [
+    "monthly",
+    "quarterly",
+    "semi-annually",
+    "annually"
+  ],
+  "Description=description": "",
+  "Zillow ID=zpid": 1
 }
