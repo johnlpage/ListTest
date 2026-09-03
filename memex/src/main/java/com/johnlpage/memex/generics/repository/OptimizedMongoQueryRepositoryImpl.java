@@ -2,6 +2,8 @@ package com.johnlpage.memex.generics.repository;
 
 import static com.johnlpage.memex.util.AnnotationExtractor.renameKeysRecursively;
 
+import com.mongodb.ReadPreference;
+import com.mongodb.client.AggregateIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Aggregates;
 
@@ -22,8 +24,6 @@ import org.springframework.data.mapping.PersistentEntity;
 import org.springframework.data.mapping.PersistentProperty;
 import org.springframework.data.mapping.context.MappingContext;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.convert.MappingMongoConverter;
 import org.springframework.data.mongodb.core.convert.QueryMapper;
 import org.springframework.data.mongodb.core.mapping.MongoPersistentEntity;
@@ -254,25 +254,33 @@ public class OptimizedMongoQueryRepositoryImpl<T> implements OptimizedMongoQuery
                     queryRequest.getInteger("limit") != null ? queryRequest.getInteger("limit") : 1000;
 
             Bson searchStage = new Document("$search", searchSpec);
-            Aggregation aggregation;
+            List<Bson> pipeline = new ArrayList<>();
+            pipeline.add(searchStage);
+            pipeline.add(Aggregates.skip(skip));
+            pipeline.add(Aggregates.limit(limit));
             if (!projection.isEmpty()) {
-                Bson projectStage = Aggregates.project(projection);
-
-                aggregation =
-                        Aggregation.newAggregation(
-                                Aggregation.stage(searchStage),
-                                Aggregation.skip(skip),
-                                Aggregation.limit(limit),
-                                Aggregation.stage(projectStage));
-
-            } else {
-                aggregation =
-                        Aggregation.newAggregation(
-                                Aggregation.stage(searchStage), Aggregation.skip(skip), Aggregation.limit(limit));
+                pipeline.add(Aggregates.project(projection));
             }
-            LOG.info(aggregation.toString());
-            AggregationResults<T> results = mongoTemplate.aggregate(aggregation, clazz, clazz);
-            return results.getMappedResults();
+            LOG.info(pipeline.toString());
+
+            // $search queries run against Atlas Search's own dedicated search nodes/indexes
+            // rather than the regular replica set data, so - unlike every other query method in
+            // this class - it's safe (and lower-latency) to read from the nearest node instead of
+            // requiring the primary. This override is scoped to just this one native aggregate
+            // call via .withReadPreference() on the collection, NOT via mongoTemplate (which has
+            // no equivalent per-call override), so no other operation's read preference is
+            // affected.
+            MongoCollection<Document> collection =
+                    mongoTemplate
+                            .getCollection(mongoTemplate.getCollectionName(clazz))
+                            .withReadPreference(ReadPreference.nearest());
+
+            AggregateIterable<Document> results = collection.aggregate(pipeline, Document.class);
+            List<T> mappedResults = new ArrayList<>();
+            for (Document doc : results) {
+                mappedResults.add(mongoTemplate.getConverter().read(clazz, doc));
+            }
+            return mappedResults;
 
         } catch (Exception e) {
             LOG.error("Error parsing query request", e);
